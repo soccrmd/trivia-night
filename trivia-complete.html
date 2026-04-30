@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Night Pro</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+    
+    body { 
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1a1a1a;
+      min-height: 100vh;
+      margin: 0;
+    }
+    
+    input, select { 
+      font-family: inherit; 
+      border: 2px solid #ddd;
+      border-radius: 12px; 
+      padding: 12px 16px; 
+      font-size: 14px;
+      background: white;
+      transition: all 0.3s;
+      width: 100%;
+    }
+    
+    input:focus, select:focus { 
+      outline: none; 
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    button { 
+      font-family: inherit; 
+      font-size: 14px; 
+      border-radius: 12px; 
+      cursor: pointer; 
+      transition: all 0.3s;
+      font-weight: 500;
+      border: none;
+      padding: 12px 24px;
+    }
+    
+    button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+    
+    .primary-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .secondary-btn {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      animation: slideUp 0.5s ease;
+    }
+    
+    .container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    
+    .answer-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 16px;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 15px;
+    }
+    
+    .answer-btn:hover:not(:disabled) { transform: translateX(10px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3); }
+    .answer-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    .timer { font-size: 72px; font-weight: 700; text-align: center; animation: pulse 1s infinite; }
+    
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #f5f7ff 0%, #fff 100%);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border-left: 4px solid #667eea;
+    }
+    
+    .category-btn {
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: 2px solid #ddd;
+      background: white;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 600;
+      margin: 6px;
+    }
+    
+    .category-btn.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-color: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    let db;
+    let firebaseReady = false;
+    
+    document.getElementById('app').innerHTML = `
+      <div class="container">
+        <div class="card" style="text-align: center; max-width: 400px;">
+          <h2 style="margin: 0 0 1.5rem;">⏳ Connecting...</h2>
+          <p style="color: #999; margin: 0;">Initializing Firebase...</p>
+        </div>
+      </div>
+    `;
+    
+    const QUESTIONS = [
+      // MUSIC - 30 QUESTIONS
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Imagine all the people...', answer: 'Imagine', options: ['Imagine', 'Let It Be', 'Hey Jude', 'Come Together'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I want to hold your hand...', answer: 'I Want to Hold Your Hand', options: ['I Want to Hold Your Hand', 'Let It Be', 'She Loves You', 'Help'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Is this the real life? Is this just fantasy?', answer: 'Bohemian Rhapsody', options: ['Bohemian Rhapsody', 'Another One Bites the Dust', 'We Are the Champions', 'Somebody to Love'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Don\'t stop me now, I\'m having such a good time...', answer: 'Don\'t Stop Me Now', options: ['Don\'t Stop Me Now', 'Another One Bites the Dust', 'Fat Bottomed Girls', 'Killer Queen'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Like a virgin...', answer: 'Like a Virgin', options: ['Like a Virgin', 'Vogue', 'Material Girl', 'Justify My Love'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I see a red door and I want it painted black...', answer: 'Paint It Black', options: ['Paint It Black', 'Brown Sugar', 'Sympathy for the Devil', 'Jumpin\' Jack Flash'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Hello darkness my old friend...', answer: 'The Sound of Silence', options: ['The Sound of Silence', 'Bridge Over Troubled Water', 'Mrs. Robinson', 'Cecilia'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'She\'s just a small town girl living in a lonely world...', answer: 'Don\'t Stop Believin\'', options: ['Don\'t Stop Believin\'', 'Journey', 'Lights', 'Open Arms'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I\'m on the highway to hell...', answer: 'Highway to Hell', options: ['Highway to Hell', 'Back in Black', 'You Shook Me All Night Long', 'Thunderstruck'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Hotel California...', answer: 'Hotel California', options: ['Hotel California', 'Life in the Fast Lane', 'Tequila Sunrise', 'Take It Easy'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Come as you are, as you were...', answer: 'Come as You Are', options: ['Come as You Are', 'Smells Like Teen Spirit', 'Lithium', 'Heart-Shaped Box'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Mr. Brightside...', answer: 'Mr. Brightside', options: ['Mr. Brightside', 'Somebody Told Me', 'When You Were Young', 'Human'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Sweet home Alabama...', answer: 'Sweet Home Alabama', options: ['Sweet Home Alabama', 'Free Bird', 'Simple Man', 'Tuesday\'s Gone'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'We will we will rock you...', answer: 'We Will Rock You', options: ['We Will Rock You', 'Another One Bites the Dust', 'Bohemian Rhapsody', 'Don\'t Stop Me Now'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Don\'t stop believing...', answer: 'Don\'t Stop Believin\'', options: ['Don\'t Stop Believin\'', 'Open Arms', 'Lights', 'Separate Ways'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Mama just killed a man...', answer: 'Bohemian Rhapsody', options: ['Bohemian Rhapsody', 'We Will Rock You', 'Another One Bites the Dust', 'The Show Must Go On'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I am just a poor boy...', answer: 'The Boxer', options: ['The Boxer', 'Bridge Over Troubled Water', 'Mrs. Robinson', 'Cecilia'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Turn around bright eyes...', answer: 'Total Eclipse of the Heart', options: ['Total Eclipse of the Heart', 'Love is a Battlefield', 'In the Air Tonight', 'Don\'t Stop Believin\''] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I get knocked down but I get up again...', answer: 'Tubthumping', options: ['Tubthumping', 'Closing Time', 'Semi-Charmed Life', 'Steal My Sunshine'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'We all live in a yellow submarine...', answer: 'Yellow Submarine', options: ['Yellow Submarine', 'Lucy in the Sky with Diamonds', 'Strawberry Fields', 'Penny Lane'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I wanna be sedated...', answer: 'I Wanna Be Sedated', options: ['I Wanna Be Sedated', 'Blitzkrieg Bop', 'I Wanna Be Your Dog', 'Beat on the Brat'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'I\'ll be there for you...', answer: 'I\'ll Be There for You', options: ['I\'ll Be There for You', 'The One Where', 'So No One Told You', 'How You Doin\''] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Eye of the tiger...', answer: 'Eye of the Tiger', options: ['Eye of the Tiger', 'Survivor', 'Burning Heart', 'Training Montage'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Don\'t look back in anger...', answer: 'Don\'t Look Back in Anger', options: ['Don\'t Look Back in Anger', 'Wonderwall', 'Champagne Supernova', 'Live Forever'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Wish you were here...', answer: 'Wish You Were Here', options: ['Wish You Were Here', 'Comfortably Numb', 'Another Brick in the Wall', 'Money'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'We are the champions...', answer: 'We Are the Champions', options: ['We Are the Champions', 'Another One Bites the Dust', 'Bohemian Rhapsody', 'Don\'t Stop Me Now'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Take on me...', answer: 'Take On Me', options: ['Take On Me', 'The Sun Always Shines on TV', 'Train of Thought', 'Hunting High and Low'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Losing my religion...', answer: 'Losing My Religion', options: ['Losing My Religion', 'It\'s the End of the World', 'Everybody Hurts', 'Man on the Moon'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'You know I\'m no good...', answer: 'Back to Black', options: ['Back to Black', 'Rehab', 'No One', 'Tears Dry On Their Own'] },
+      { type: 'Song Lyrics', difficulty: 'Medium', category: 'Music', question: 'Bitter sweet symphony...', answer: 'The Bitter Sweet Symphony', options: ['The Bitter Sweet Symphony', 'This Is England', 'Loneliness', 'The Drugs Don\'t Work'] },
+
+      // MOVIES - 30 QUESTIONS
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'May the Force be with you.', answer: 'Star Wars', options: ['Star Wars', 'The Matrix', 'Avatar', 'Inception'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You\'re a wizard, Harry.', answer: 'Harry Potter', options: ['Harry Potter', 'Lord of the Rings', 'Percy Jackson', 'Chronicles of Narnia'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'ll be back.', answer: 'The Terminator', options: ['The Terminator', 'Predator', 'Total Recall', 'RoboCop'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Here\'s looking at you, kid.', answer: 'Casablanca', options: ['Casablanca', 'The Maltese Falcon', 'Gone with the Wind', 'The Big Sleep'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'m gonna make him an offer he can\'t refuse.', answer: 'The Godfather', options: ['The Godfather', 'Scarface', 'The Departed', 'Goodfellas'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You can\'t handle the truth!', answer: 'A Few Good Men', options: ['A Few Good Men', 'Wall Street', 'The American President', 'The Firm'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Why so serious?', answer: 'The Dark Knight', options: ['The Dark Knight', 'The Dark Knight Rises', 'Batman Begins', 'Batman Forever'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Frankly, my dear, I don\'t give a damn.', answer: 'Gone with the Wind', options: ['Gone with the Wind', 'Casablanca', 'The Big Sleep', 'The Maltese Falcon'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I see dead people.', answer: 'The Sixth Sense', options: ['The Sixth Sense', 'The Others', 'Poltergeist', 'Ghost'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Nobody puts Baby in a corner.', answer: 'Dirty Dancing', options: ['Dirty Dancing', 'Flashdance', 'Footloose', 'A Chorus Line'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'m the king of the world!', answer: 'Titanic', options: ['Titanic', 'Avatar', 'Inception', 'Interstellar'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You talkin\' to me?', answer: 'Taxi Driver', options: ['Taxi Driver', 'Raging Bull', 'The Godfather', 'Scarface'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Life is like a box of chocolates.', answer: 'Forrest Gump', options: ['Forrest Gump', 'Cast Away', 'The Polar Express', 'Big'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'To infinity and beyond!', answer: 'Toy Story', options: ['Toy Story', 'Toy Story 2', 'Toy Story 3', 'Toy Story 4'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Houston, we have a problem.', answer: 'Apollo 13', options: ['Apollo 13', 'Gravity', 'The Right Stuff', 'Hidden Figures'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You had me at hello.', answer: 'Jerry Maguire', options: ['Jerry Maguire', 'Top Gun', 'A Few Good Men', 'The Firm'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'My precious.', answer: 'Lord of the Rings', options: ['Lord of the Rings', 'The Hobbit', 'Harry Potter', 'Percy Jackson'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'First rule of Fight Club is...', answer: 'Fight Club', options: ['Fight Club', 'American Psycho', 'Requiem for a Dream', 'SE7EN'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'There\'s no place like home.', answer: 'Wizard of Oz', options: ['Wizard of Oz', 'Dorothy', 'Over the Rainbow', 'Emerald City'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Say hello to my little friend!', answer: 'Scarface', options: ['Scarface', 'The Godfather', 'The Departed', 'Goodfellas'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I am Groot.', answer: 'Guardians of the Galaxy', options: ['Guardians of the Galaxy', 'Avengers', 'Thor', 'Ant-Man'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Inconceivable!', answer: 'The Princess Bride', options: ['The Princess Bride', 'Labyrinth', 'Legend', 'Willow'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'ll have what she\'s having.', answer: 'When Harry Met Sally', options: ['When Harry Met Sally', 'Sleepless in Seattle', 'You\'ve Got Mail', 'Breakfast at Tiffany\'s'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You\'re killing me, Smalls!', answer: 'The Sandlot', options: ['The Sandlot', 'Field of Dreams', 'Bull Durham', 'Major League'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'m Batman.', answer: 'Batman Begins', options: ['Batman Begins', 'The Dark Knight', 'The Dark Knight Rises', 'Batman Returns'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'Heeeere\'s Johnny!', answer: 'The Shining', options: ['The Shining', 'A Clockwork Orange', 'Paths of Glory', 'Dr. Strangelove'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'You can\'t sit with us.', answer: 'Mean Girls', options: ['Mean Girls', 'Clueless', 'Heathers', 'Carrie'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'I\'m flying, Jack!', answer: 'Titanic', options: ['Titanic', 'Avatar', 'Avatar: The Way of Water', 'True Lies'] },
+      { type: 'Movie Quote', difficulty: 'Medium', category: 'Movies', question: 'The first rule of Fight Club...', answer: 'Fight Club', options: ['Fight Club', 'American Psycho', 'SE7EN', 'Requiem for a Dream'] },
+
+      // TRIVIA - 30 QUESTIONS
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the capital of France?', answer: 'Paris', options: ['London', 'Paris', 'Berlin', 'Madrid'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Which planet is closest to the Sun?', answer: 'Mercury', options: ['Venus', 'Mercury', 'Earth', 'Mars'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the largest ocean on Earth?', answer: 'Pacific Ocean', options: ['Atlantic Ocean', 'Indian Ocean', 'Pacific Ocean', 'Arctic Ocean'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'How many bones are in the human body?', answer: '206', options: ['186', '206', '226', '246'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the smallest country in the world?', answer: 'Vatican City', options: ['Monaco', 'Liechtenstein', 'Malta', 'Vatican City'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'In what year did the Titanic sink?', answer: '1912', options: ['1905', '1912', '1920', '1898'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Who wrote "To Kill a Mockingbird"?', answer: 'Harper Lee', options: ['Harper Lee', 'Mark Twain', 'Ernest Hemingway', 'F. Scott Fitzgerald'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the chemical formula for salt?', answer: 'NaCl', options: ['NaCl', 'KCl', 'CaCl', 'MgCl'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the capital of Japan?', answer: 'Tokyo', options: ['Osaka', 'Tokyo', 'Kyoto', 'Yokohama'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'How many continents are there?', answer: '7', options: ['5', '6', '7', '8'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the tallest mountain in the world?', answer: 'Mount Everest', options: ['K2', 'Mount Everest', 'Kilimanjaro', 'Denali'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Who was the first President of the United States?', answer: 'George Washington', options: ['Thomas Jefferson', 'George Washington', 'John Adams', 'Benjamin Franklin'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the currency of the United Kingdom?', answer: 'British Pound', options: ['Euro', 'British Pound', 'Dollar', 'Franc'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Who invented the telephone?', answer: 'Alexander Graham Bell', options: ['Thomas Edison', 'Alexander Graham Bell', 'Nikola Tesla', 'Samuel Morse'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'In what country are the Great Pyramids located?', answer: 'Egypt', options: ['Sudan', 'Egypt', 'Nubia', 'Giza'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the speed of light?', answer: '299,792 km/s', options: ['100,000 km/s', '299,792 km/s', '150,000 km/s', '500,000 km/s'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Who painted the Mona Lisa?', answer: 'Leonardo da Vinci', options: ['Michelangelo', 'Leonardo da Vinci', 'Raphael', 'Donatello'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the most spoken language by native speakers?', answer: 'Mandarin Chinese', options: ['English', 'Spanish', 'Mandarin Chinese', 'Hindi'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'In what year did World War II end?', answer: '1945', options: ['1943', '1944', '1945', '1946'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'How many strings does a standard guitar have?', answer: '6', options: ['4', '5', '6', '8'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the freezing point of water in Celsius?', answer: '0°C', options: ['-10°C', '0°C', '10°C', '32°C'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Who wrote "1984"?', answer: 'George Orwell', options: ['Ray Bradbury', 'George Orwell', 'Aldous Huxley', 'Isaac Asimov'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the smallest prime number?', answer: '2', options: ['1', '2', '3', '5'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'In what century was the Renaissance?', answer: '14th-17th century', options: ['12th-13th century', '14th-17th century', '18th-19th century', '20th century'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the capital of Australia?', answer: 'Canberra', options: ['Sydney', 'Melbourne', 'Canberra', 'Brisbane'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'Which planet is largest in our solar system?', answer: 'Jupiter', options: ['Saturn', 'Jupiter', 'Neptune', 'Uranus'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the formula for water?', answer: 'H2O', options: ['CO2', 'H2O', 'O2', 'NaCl'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'How many sides does a hexagon have?', answer: '6', options: ['4', '5', '6', '8'] },
+      { type: 'Trivia', difficulty: 'Medium', category: 'Trivia', question: 'What is the capital of Spain?', answer: 'Madrid', options: ['Barcelona', 'Madrid', 'Valencia', 'Seville'] }
+    ];
+
+    let state = {
+      screen: 'home',
+      role: null,
+      playerName: '',
+      playerId: null,
+      gameRoom: 'game1',
+      gameState: null,
+      players: {},
+      selectedCategory: 'All',
+      selectedDifficulty: 'All',
+      timerLength: 10,
+      numQuestions: 6
+    };
+
+    function shuffle(arr) {
+      return [...arr].sort(() => Math.random() - 0.5);
+    }
+
+    function getFilteredQuestions() {
+      return QUESTIONS.filter(q => {
+        const catMatch = state.selectedCategory === 'All' || q.category === state.selectedCategory;
+        const diffMatch = state.selectedDifficulty === 'All' || q.difficulty === state.selectedDifficulty;
+        return catMatch && diffMatch;
+      });
+    }
+
+    function initFirebase() {
+      let attempts = 0;
+      function retry() {
+        attempts++;
+        if (attempts > 30) {
+          document.getElementById('app').innerHTML = `<div class="container"><div class="card" style="text-align: center; max-width: 400px;"><h2 style="color: #d32f2f;">⚠️ Connection Failed</h2><p style="color: #999;">Firebase timed out. Please refresh.</p><button class="primary-btn" onclick="location.reload()" style="width: 100%; margin-top: 1rem;">Refresh</button></div></div>`;
+          return;
+        }
+        if (typeof firebase === 'undefined') {
+          setTimeout(retry, 200);
+          return;
+        }
+        try {
+          const firebaseConfig = {
+            apiKey: "AIzaSyDzyj3uiCFo7uSFwQHtJz3PkC3m2a7FTI",
+            authDomain: "il-trivia-game.firebaseapp.com",
+            databaseURL: "https://il-trivia-game-default-rtdb.firebaseio.com",
+            projectId: "il-trivia-game",
+            storageBucket: "il-trivia-game.firebasestorage.app",
+            messagingSenderId: "391298129489",
+            appId: "1:391298129489:web:2cb1cf17171401sd0be270"
+          };
+          if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+          db = firebase.database();
+          firebaseReady = true;
+          setTimeout(() => render(), 500);
+        } catch (e) {
+          console.error('Firebase error:', e);
+          setTimeout(retry, 200);
+        }
+      }
+      retry();
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      if (!firebaseReady) {
+        app.innerHTML = `<div class="container"><div class="card" style="text-align: center;"><h2>⏳ Connecting...</h2></div></div>`;
+        return;
+      }
+
+      if (state.screen === 'home') {
+        app.innerHTML = `<div class="container"><div style="text-align: center; max-width: 600px;"><h1 style="font-size: 56px; font-weight: 700; margin: 0 0 1rem; color: white; text-shadow: 0 4px 12px rgba(0,0,0,0.2);">🎮 Trivia Night Pro</h1><p style="font-size: 18px; color: rgba(255,255,255,0.9); margin: 0 0 3rem;">The Ultimate Game Show Experience</p><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 400px;"><button class="primary-btn" onclick="hostSetup()" style="font-size: 15px; font-weight: 600;">🎯 Host Game</button><button class="secondary-btn" onclick="goJoin()" style="font-size: 15px; font-weight: 600;">👥 Join Game</button></div></div></div>`;
+      } else if (state.screen === 'host-setup') {
+        app.innerHTML = `<div class="container"><div class="card" style="max-width: 600px; width: 100%;"><h2 style="font-size: 28px; margin: 0 0 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); background-clip: text; -webkit-background-clip: text; color: transparent;">⚙️ Game Setup</h2><div style="margin-bottom: 1.5rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">Room Code</label><input type="text" id="roomCode" value="${state.gameRoom}" placeholder="game1"></div><div style="margin-bottom: 1.5rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">📁 Category</label><div><button class="category-btn ${state.selectedCategory === 'All' ? 'active' : ''}" onclick="selectCategory('All')">All</button><button class="category-btn ${state.selectedCategory === 'Music' ? 'active' : ''}" onclick="selectCategory('Music')">🎵 Music</button><button class="category-btn ${state.selectedCategory === 'Movies' ? 'active' : ''}" onclick="selectCategory('Movies')">🎬 Movies</button><button class="category-btn ${state.selectedCategory === 'Trivia' ? 'active' : ''}" onclick="selectCategory('Trivia')">🧠 Trivia</button></div></div><div style="margin-bottom: 1.5rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">⚡ Difficulty</label><div><button class="category-btn ${state.selectedDifficulty === 'All' ? 'active' : ''}" onclick="selectDifficulty('All')">All</button><button class="category-btn ${state.selectedDifficulty === 'Medium' ? 'active' : ''}" onclick="selectDifficulty('Medium')">Medium</button></div></div><div style="margin-bottom: 1.5rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">⏱️ Timer (seconds): <strong>${state.timerLength}</strong></label><input type="range" id="timerSlider" min="5" max="30" value="${state.timerLength}" style="width: 100%;"></div><div style="margin-bottom: 2rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">❓ Number of Questions: <strong>${state.numQuestions}</strong></label><input type="range" id="questionsSlider" min="3" max="${getFilteredQuestions().length}" value="${state.numQuestions}" style="width: 100%;"><p style="font-size: 12px; color: #999; margin: 8px 0 0;">Available: ${getFilteredQuestions().length} questions</p></div><button class="primary-btn" onclick="startGameHost()" style="width: 100%; margin-bottom: 12px; font-size: 16px; font-weight: 600;">🎮 Start Game</button><button class="secondary-btn" onclick="goHome()" style="width: 100%; font-size: 16px; font-weight: 600;">Back</button></div></div>`;
+        document.getElementById('roomCode').addEventListener('change', (e) => state.gameRoom = e.target.value);
+        document.getElementById('timerSlider').addEventListener('input', (e) => { state.timerLength = parseInt(e.target.value); render(); });
+        document.getElementById('questionsSlider').addEventListener('input', (e) => { state.numQuestions = parseInt(e.target.value); });
+      } else if (state.screen === 'host-game') {
+        const filtered = getFilteredQuestions();
+        const q = state.gameState ? filtered[state.gameState.qIndex] : null;
+        const playersList = Object.values(state.players).sort((a, b) => b.score - a.score);
+        app.innerHTML = `<div style="min-height: 100vh; padding: 2rem; display: grid; grid-template-columns: 1fr 280px; gap: 2rem;"><div><div class="card" style="margin-bottom: 2rem; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border: 2px solid #667eea30;"><div style="display: flex; justify-content: space-between;"><div><p style="margin: 0 0 0.5rem; color: #999; font-size: 13px;">Host Control</p><p style="margin: 0; font-size: 32px; font-weight: 700; color: #667eea;">🎯</p></div><button class="secondary-btn" onclick="endGame()" style="padding: 10px 16px; font-size: 12px;">🛑 END GAME</button></div></div>${state.gameState?.phase === 'waiting' ? `<div class="card" style="text-align: center; padding: 3rem 2rem;"><h2 style="font-size: 36px; margin: 0 0 1rem;">⏳ Ready to Play?</h2><p style="font-size: 18px; color: #667eea; margin: 0 0 1rem; font-weight: 600;">Players: ${playersList.length}</p><button class="primary-btn" onclick="hostStartsGame()" style="width: 100%; padding: 16px; font-size: 18px; font-weight: 600;">▶️ START GAME</button></div>` : q ? `<div class="card" style="margin-bottom: 2rem;"><p style="margin: 0 0 0.5rem; color: #667eea; font-size: 12px; font-weight: 600; text-transform: uppercase;">📌 ${q.type} • ${q.difficulty}</p><p style="margin: 0 0 1rem; color: #999;">Q${state.gameState.qIndex + 1}/${state.numQuestions}</p><h2 style="margin: 0; font-size: 26px; line-height: 1.4;">${q.question}</h2></div>${state.gameState.phase === 'question' ? `<div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border-radius: 16px; margin-bottom: 2rem; border: 2px solid #667eea30;"><div class="timer" style="font-size: 56px; color: ${state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea'};">${state.gameState.timer}</div></div><p style="color: #667eea; text-align: center; margin: 0; font-size: 14px; font-weight: 600;">⏳ ${Object.values(state.players).filter(p => p.lastAnswer).length}/${Object.keys(state.players).length} answered</p>` : `<div class="card" style="background: linear-gradient(135deg, #4caf5020 0%, #4caf5040 100%); border: 3px solid #4caf50; text-align: center;"><h3 style="margin: 0 0 1rem; font-size: 28px; color: #1b5e20;">✅ ${q.answer}</h3><button class="primary-btn" onclick="nextQuestion()" style="width: 100%; padding: 16px; font-size: 16px; font-weight: 600;">➡️ NEXT QUESTION</button></div>`}` : ''}</div><div class="card" style="max-height: 90vh; overflow-y: auto;"><h3 style="margin: 0 0 1.5rem; font-size: 14px; font-weight: 700; text-transform: uppercase;">🏅 Leaderboard</h3>${playersList.length === 0 ? '<p style="color: #999; text-align: center;">Waiting for players...</p>' : playersList.map((p, i) => `<div class="leaderboard-item"><span style="font-weight: 600;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}. ${p.name}</span><span style="font-weight: 700; color: #667eea;">${p.score}</span></div>`).join('')}</div></div>`;
+      } else if (state.screen === 'join') {
+        app.innerHTML = `<div class="container"><div class="card" style="max-width: 450px; width: 100%;"><h2 style="font-size: 28px; margin: 0 0 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); background-clip: text; -webkit-background-clip: text; color: transparent;">👥 Join Game</h2><div style="margin-bottom: 1.5rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">Room Code</label><input type="text" id="joinRoom" value="game1" placeholder="game1"></div><div style="margin-bottom: 2rem;"><label style="display: block; margin-bottom: 8px; font-weight: 600;">Your Name</label><input type="text" id="playerName" placeholder="Enter your name"></div><button class="primary-btn" onclick="joinGame()" style="width: 100%; margin-bottom: 12px; font-size: 16px; font-weight: 600;">Join Game</button><button class="secondary-btn" onclick="goHome()" style="width: 100%; font-size: 16px; font-weight: 600;">Back</button></div></div>`;
+        document.getElementById('joinRoom').addEventListener('change', (e) => state.gameRoom = e.target.value);
+      } else if (state.screen === 'player-game') {
+        const filtered = getFilteredQuestions();
+        const q = state.gameState ? filtered[state.gameState.qIndex] : null;
+        const playersList = Object.values(state.players).sort((a, b) => b.score - a.score);
+        const myScore = state.players[state.playerId]?.score || 0;
+        const myRank = playersList.findIndex(p => p.uid === state.playerId) + 1;
+        app.innerHTML = `<div style="min-height: 100vh; padding: 2rem; display: grid; grid-template-columns: 1fr 280px; gap: 2rem;"><div><div class="card" style="margin-bottom: 2rem; background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%); border: 2px solid #667eea30;"><div style="display: flex; justify-content: space-between;"><div><p style="margin: 0 0 0.5rem; color: #999; font-size: 13px;">Your Score</p><p style="margin: 0; font-size: 32px; font-weight: 700; color: #667eea;">${myScore}</p></div><div style="text-align: right;"><p style="margin: 0 0 0.5rem; color: #999;">${state.playerName}</p><p style="margin: 0; font-size: 24px; font-weight: 700;">${myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '#' + myRank}</p></div></div></div>${state.gameState?.phase === 'waiting' ? `<div class="card" style="text-align: center; padding: 3rem 2rem;"><h2 style="font-size: 36px; margin: 0 0 1rem;">⏳ Waiting...</h2><p style="font-size: 18px; color: #667eea; margin: 0 0 1rem; font-weight: 600;">Host is getting ready!</p><p style="font-size: 14px; color: #999; margin: 0;">You have ${playersList.length} player${playersList.length !== 1 ? 's' : ''} in the game</p></div>` : q ? `<div class="card" style="margin-bottom: 2rem;"><p style="margin: 0 0 0.5rem; color: #667eea; font-size: 12px; font-weight: 600; text-transform: uppercase;">📌 ${q.type} • ${q.difficulty}</p><p style="margin: 0 0 1rem; color: #999;">Q${state.gameState.qIndex + 1}/${state.numQuestions}</p><h2 style="margin: 0; font-size: 26px; line-height: 1.4;">${q.question}</h2></div>${state.gameState.phase === 'question' ? `<div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border-radius: 16px; margin-bottom: 2rem; border: 2px solid #667eea30;"><div class="timer" style="font-size: 56px; color: ${state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea'};">${state.gameState.timer}</div></div><div>${state.gameState.timer > 0 ? shuffle(q.options).map(opt => `<button class="answer-btn" onclick="selectAnswer('${opt}')">${opt}</button>`).join('') : `<div style="padding: 2rem; background: #ffcdd220; border-radius: 12px; text-align: center;"><p style="margin: 0; font-weight: 600; color: #b71c1c;">⏱️ Time's Up!</p></div>`}</div>` : `<div class="card" style="background: ${state.players[state.playerId]?.isCorrect ? '#c8e6c920' : '#ffcdd220'}; border: 3px solid ${state.players[state.playerId]?.isCorrect ? '#4caf50' : '#d32f2f'}; text-align: center;"><h3 style="margin: 0 0 1rem; font-size: 32px; color: ${state.players[state.playerId]?.isCorrect ? '#1b5e20' : '#b71c1c'};">${state.players[state.playerId]?.isCorrect ? '✅ Correct!' : '❌ Incorrect'}</h3><p style="margin: 0 0 1rem; color: #333;">Answer: <strong>${q.answer}</strong></p>${state.players[state.playerId]?.pointsEarned ? `<p style="margin: 0; font-size: 20px; font-weight: 700; color: ${state.players[state.playerId]?.isCorrect ? '#1b5e20' : '#b71c1c'};">+${state.players[state.playerId].pointsEarned} points!</p>` : ''}</div>`}` : ''}</div><div class="card" style="max-height: 90vh; overflow-y: auto;"><h3 style="margin: 0 0 1.5rem; font-size: 14px; font-weight: 700; text-transform: uppercase;">🏅 Leaderboard</h3>${playersList.map((p, i) => `<div class="leaderboard-item" style="border: ${p.uid === state.playerId ? '2px solid #667eea' : 'unset'};"><span style="font-weight: 600;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}. ${p.name}</span><span style="font-weight: 700; color: #667eea;">${p.score}</span></div>`).join('')}</div></div>`;
+      }
+    }
+
+    function goHome() { state.screen = 'home'; render(); }
+    function hostSetup() { state.screen = 'host-setup'; state.role = 'host'; render(); }
+    function goJoin() { state.screen = 'join'; render(); }
+    function selectCategory(cat) { state.selectedCategory = cat; state.numQuestions = Math.min(state.numQuestions, getFilteredQuestions().length); render(); }
+    function selectDifficulty(diff) { state.selectedDifficulty = diff; state.numQuestions = Math.min(state.numQuestions, getFilteredQuestions().length); render(); }
+
+    function startGameHost() {
+      if (!firebaseReady || !db) { alert('Firebase not ready'); return; }
+      const filtered = getFilteredQuestions();
+      if (filtered.length === 0) { alert('No questions available for this filter'); return; }
+      state.role = 'host';
+      state.screen = 'host-game';
+      db.ref(`players/${state.gameRoom}`).remove();
+      const gameState = { phase: 'waiting', qIndex: 0, timer: state.timerLength, timerLength: state.timerLength, numQuestions: state.numQuestions };
+      db.ref(`games/${state.gameRoom}`).set(gameState);
+      listenToGame();
+      render();
+    }
+
+    function hostStartsGame() {
+      if (!firebaseReady || !db) return;
+      db.ref(`games/${state.gameRoom}`).update({ phase: 'question', timer: state.timerLength });
+    }
+
+    function endGame() {
+      if (!firebaseReady || !db) return;
+      db.ref(`games/${state.gameRoom}`).remove();
+      db.ref(`players/${state.gameRoom}`).remove();
+      state.screen = 'host-setup';
+      state.gameState = null;
+      state.players = {};
+      state.playerId = null;
+      state.playerName = '';
+      render();
+    }
+
+    function joinGame() {
+      if (!firebaseReady || !db) { alert('Firebase not ready'); return; }
+      const room = document.getElementById('joinRoom').value;
+      const name = document.getElementById('playerName').value;
+      if (!name) { alert('Enter a name'); return; }
+      state.gameRoom = room;
+      state.playerName = name;
+      state.playerId = 'p_' + Math.random().toString(36).substr(2, 9);
+      state.role = 'player';
+      db.ref(`players/${state.gameRoom}/${state.playerId}`).set({ uid: state.playerId, name, score: 0, lastAnswer: null, isCorrect: null, pointsEarned: 0 });
+      state.screen = 'player-game';
+      listenToGame();
+      render();
+    }
+
+    function selectAnswer(answer) {
+      if (!firebaseReady || !db) return;
+      if (state.gameState?.phase !== 'question') return;
+      const filtered = getFilteredQuestions();
+      const q = filtered[state.gameState.qIndex];
+      const isCorrect = answer === q.answer;
+      const timeSpent = state.timerLength - state.gameState.timer;
+      const speedBonus = isCorrect ? Math.max(0, (state.timerLength - timeSpent) * 5) : 0;
+      const totalPoints = (isCorrect ? 100 : 0) + speedBonus;
+      const newScore = (state.players[state.playerId]?.score || 0) + totalPoints;
+      db.ref(`players/${state.gameRoom}/${state.playerId}`).update({ score: newScore, lastAnswer: answer, isCorrect, pointsEarned: totalPoints });
+      db.ref(`games/${state.gameRoom}`).update({ phase: 'reveal' });
+      render();
+    }
+
+    function nextQuestion() {
+      if (!firebaseReady || !db) return;
+      const filtered = getFilteredQuestions();
+      if (state.gameState.qIndex + 1 < state.numQuestions) {
+        db.ref(`games/${state.gameRoom}`).update({ phase: 'question', qIndex: state.gameState.qIndex + 1, timer: state.timerLength });
+      } else {
+        db.ref(`games/${state.gameRoom}`).update({ phase: 'final' });
+      }
+    }
+
+    function listenToGame() {
+      if (!db) return;
+      db.ref(`games/${state.gameRoom}`).on('value', (snap) => { 
+        const oldPhase = state.gameState?.phase;
+        state.gameState = snap.val();
+        if (oldPhase !== state.gameState?.phase) {
+          render();
+        } else {
+          updateTimerDisplay();
+        }
+      });
+      db.ref(`players/${state.gameRoom}`).on('value', (snap) => { state.players = snap.val() || {}; render(); });
+    }
+
+    function updateTimerDisplay() {
+      const timerEl = document.querySelector('.timer');
+      if (timerEl && state.gameState?.timer !== undefined) {
+        timerEl.textContent = state.gameState.timer;
+        timerEl.style.color = state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea';
+      }
+    }
+
+    setInterval(() => {
+      if (!db || !state.gameState?.phase) return;
+      if (state.gameState.phase === 'question' && state.gameState.timer > 0) {
+        db.ref(`games/${state.gameRoom}/timer`).set(state.gameState.timer - 1);
+      }
+    }, 1000);
+
+    initFirebase();
+  </script>
+</body>
+</html>
