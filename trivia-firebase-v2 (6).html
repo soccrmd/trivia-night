@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Night Pro</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    
+    body { 
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1a1a1a;
+      min-height: 100vh;
+      margin: 0;
+    }
+    
+    input { 
+      font-family: inherit; 
+      border: 2px solid #ddd;
+      border-radius: 12px; 
+      padding: 12px 16px; 
+      font-size: 14px;
+      background: white;
+      transition: all 0.3s;
+      width: 100%;
+    }
+    
+    input:focus { 
+      outline: none; 
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    button { 
+      font-family: inherit; 
+      font-size: 14px; 
+      border-radius: 12px; 
+      cursor: pointer; 
+      transition: all 0.3s;
+      font-weight: 500;
+      border: none;
+      padding: 12px 24px;
+    }
+    
+    button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+    
+    .primary-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .secondary-btn {
+      background: white;
+      color: #667eea;
+      border: 2px solid #667eea;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      animation: slideUp 0.5s ease;
+    }
+    
+    .container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    
+    .answer-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 16px;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 12px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .answer-btn:hover:not(:disabled) { transform: translateX(10px); }
+    .answer-btn.correct { background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); }
+    .answer-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    .timer { font-size: 72px; font-weight: 700; text-align: center; animation: pulse 1s infinite; }
+    
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #f5f7ff 0%, #fff 100%);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border-left: 4px solid #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    let db;
+    let firebaseReady = false;
+    
+    // Show loading screen
+    document.getElementById('app').innerHTML = `
+      <div class="container">
+        <div class="card" style="text-align: center; max-width: 400px;">
+          <h2 style="margin: 0 0 1.5rem;">⏳ Loading...</h2>
+          <p style="color: #999; margin: 0;">Connecting to Firebase...</p>
+        </div>
+      </div>
+    `;
+    
+    // Wait for Firebase to load with timeout
+    let firebaseAttempts = 0;
+    function initFirebase() {
+      firebaseAttempts++;
+      
+      if (firebaseAttempts > 30) {
+        document.getElementById('app').innerHTML = `
+          <div class="container">
+            <div class="card" style="text-align: center; max-width: 400px;">
+              <h2 style="color: #d32f2f; margin: 0 0 1rem;">⚠️ Connection Failed</h2>
+              <p style="color: #999; margin: 0 0 1.5rem;">Firebase connection timed out. Please refresh the page.</p>
+              <button class="primary-btn" onclick="location.reload()" style="width: 100%;">Refresh Page</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      if (typeof firebase === 'undefined') {
+        setTimeout(initFirebase, 200);
+        return;
+      }
+      
+      try {
+        const firebaseConfig = {
+          apiKey: "AIzaSyDzyj3uiCFo7uSFwQHtJz3PkC3m2a7FTI",
+          authDomain: "il-trivia-game.firebaseapp.com",
+          databaseURL: "https://il-trivia-game-default-rtdb.firebaseio.com",
+          projectId: "il-trivia-game",
+          storageBucket: "il-trivia-game.firebasestorage.app",
+          messagingSenderId: "391298129489",
+          appId: "1:391298129489:web:2cb1cf17171401sd0be270"
+        };
+
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        
+        db = firebase.database();
+        firebaseReady = true;
+        console.log('Firebase connected!');
+        
+        // Wait a moment to ensure connection
+        setTimeout(() => {
+          render();
+        }, 500);
+      } catch (e) {
+        console.error('Firebase error:', e);
+        setTimeout(initFirebase, 200);
+      }
+    }
+    
+    initFirebase();
+
+    const QUESTIONS = [
+      { question: 'What is the capital of France?', answer: 'Paris', options: ['London', 'Paris', 'Berlin', 'Madrid'] },
+      { question: 'Which planet is closest to the Sun?', answer: 'Mercury', options: ['Venus', 'Mercury', 'Earth', 'Mars'] },
+      { question: 'Who wrote "To Kill a Mockingbird"?', answer: 'Harper Lee', options: ['Harper Lee', 'Mark Twain', 'Ernest Hemingway', 'F. Scott Fitzgerald'] },
+      { question: 'What is the chemical formula for salt?', answer: 'NaCl', options: ['NaCl', 'KCl', 'CaCl', 'MgCl'] },
+      { question: 'In what year did the Titanic sink?', answer: '1912', options: ['1905', '1912', '1920', '1898'] },
+      { question: 'What is the capital of Japan?', answer: 'Tokyo', options: ['Osaka', 'Kyoto', 'Tokyo', 'Yokohama'] },
+    ];
+
+    let state = {
+      screen: 'home',
+      role: null,
+      playerName: '',
+      playerId: null,
+      gameRoom: 'game1',
+      gameState: null,
+      players: {}
+    };
+
+    function shuffle(arr) {
+      return [...arr].sort(() => Math.random() - 0.5);
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      
+      // Show loading if Firebase not ready
+      if (!firebaseReady) {
+        app.innerHTML = `
+          <div class="container">
+            <div class="card" style="text-align: center; max-width: 400px;">
+              <h2 style="margin: 0 0 1.5rem;">⏳ Connecting...</h2>
+              <p style="color: #999; margin: 0;">Initializing Firebase...</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
+      if (state.screen === 'home') {
+        app.innerHTML = `
+          <div class="container">
+            <div style="text-align: center; max-width: 600px;">
+              <h1 style="font-size: 48px; font-weight: 700; margin: 0 0 1rem; color: white;">🎮 Trivia Night Pro</h1>
+              <p style="font-size: 16px; color: rgba(255,255,255,0.9); margin: 0 0 3rem;">Firebase Multiplayer</p>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 400px;">
+                <button class="primary-btn" onclick="hostSetup()">🎯 Host Game</button>
+                <button class="secondary-btn" onclick="goJoin()">👥 Join Game</button>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (state.screen === 'host-setup') {
+        app.innerHTML = `
+          <div class="container">
+            <div class="card" style="max-width: 500px; width: 100%;">
+              <h2 style="font-size: 28px; margin: 0 0 2rem;">⚙️ Game Setup</h2>
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Room Code</label>
+                <input type="text" id="roomCode" value="game1" placeholder="game1">
+              </div>
+              <button class="primary-btn" onclick="startGameHost()" style="width: 100%; margin-bottom: 12px;">Start Game</button>
+              <button class="secondary-btn" onclick="goHome()" style="width: 100%;">Back</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('roomCode').addEventListener('change', (e) => state.gameRoom = e.target.value);
+      } else if (state.screen === 'join') {
+        app.innerHTML = `
+          <div class="container">
+            <div class="card" style="max-width: 450px; width: 100%;">
+              <h2 style="font-size: 28px; margin: 0 0 2rem;">👥 Join Game</h2>
+              <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Room Code</label>
+                <input type="text" id="joinRoom" value="game1" placeholder="game1">
+              </div>
+              <div style="margin-bottom: 2rem;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Your Name</label>
+                <input type="text" id="playerName" placeholder="Enter your name">
+              </div>
+              <button class="primary-btn" onclick="joinGame()" style="width: 100%; margin-bottom: 12px;">Join</button>
+              <button class="secondary-btn" onclick="goHome()" style="width: 100%;">Back</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('joinRoom').addEventListener('change', (e) => state.gameRoom = e.target.value);
+      } else if (state.screen === 'host-game') {
+        const q = state.gameState ? QUESTIONS[state.gameState.qIndex] : null;
+        const playersList = Object.values(state.players).sort((a, b) => b.score - a.score);
+        app.innerHTML = `
+          <div style="min-height: 100vh; padding: 2rem; display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+            <div class="card">
+              ${q ? `
+                <p style="margin: 0 0 0.5rem; color: #999; font-size: 13px;">Q${state.gameState.qIndex + 1}/${QUESTIONS.length}</p>
+                <h2 style="margin: 0 0 2rem; font-size: 26px;">${q.question}</h2>
+                <div style="text-align: center; padding: 2rem; background: rgba(102, 126, 234, 0.1); border-radius: 16px; margin-bottom: 2rem;">
+                  <div class="timer" style="color: ${state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea'};">${state.gameState.timer}</div>
+                </div>
+                ${state.gameState.phase === 'reveal' ? `
+                  <div style="padding: 2rem; background: linear-gradient(135deg, #ffd70015 0%, #ffd70030 100%); border: 3px solid #ffd700; border-radius: 16px; margin-bottom: 2rem;">
+                    <p style="font-size: 24px; font-weight: 700; color: #333; margin: 0;">${q.answer}</p>
+                  </div>
+                  <button class="primary-btn" onclick="nextQuestion()" style="width: 100%;">Next →</button>
+                ` : `
+                  <p style="color: #999; text-align: center;">${Object.values(state.players).filter(p => p.lastAnswer).length}/${Object.keys(state.players).length} answered</p>
+                `}
+              ` : '<p>No game started</p>'}
+            </div>
+            <div class="card">
+              <h3 style="margin: 0 0 1.5rem; font-size: 14px; text-transform: uppercase;">🏅 Leaderboard</h3>
+              ${playersList.map((p, i) => `
+                <div class="leaderboard-item">
+                  <div>
+                    <span style="font-weight: 600;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}. ${p.name}</span>
+                  </div>
+                  <span style="font-weight: 700;">${p.score}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else if (state.screen === 'player-game') {
+        const q = state.gameState ? QUESTIONS[state.gameState.qIndex] : null;
+        const playersList = Object.values(state.players).sort((a, b) => b.score - a.score);
+        const myScore = state.players[state.playerId]?.score || 0;
+        const myRank = playersList.findIndex(p => p.uid === state.playerId) + 1;
+        app.innerHTML = `
+          <div style="min-height: 100vh; padding: 2rem; display: grid; grid-template-columns: 1fr 280px; gap: 2rem;">
+            <div>
+              <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between;">
+                  <div><p style="margin: 0 0 0.5rem; color: #999; font-size: 13px;">Your Score</p><p style="margin: 0; font-size: 32px; font-weight: 700; color: #667eea;">${myScore}</p></div>
+                  <div style="text-align: right;"><p style="margin: 0 0 0.5rem; color: #999;">${state.playerName}</p><p style="margin: 0; font-size: 24px; font-weight: 700;">${myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '#' + myRank}</p></div>
+                </div>
+              </div>
+              ${q ? `
+                <div class="card" style="margin-bottom: 2rem;">
+                  <p style="margin: 0 0 0.5rem; color: #999;">Q${state.gameState.qIndex + 1}/${QUESTIONS.length}</p>
+                  <h2 style="margin: 0; font-size: 26px;">${q.question}</h2>
+                </div>
+                ${state.gameState.phase === 'question' ? `
+                  <div style="text-align: center; padding: 1.5rem; background: rgba(102, 126, 234, 0.1); border-radius: 16px; margin-bottom: 2rem;">
+                    <div class="timer" style="font-size: 56px; color: ${state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea'};">${state.gameState.timer}</div>
+                  </div>
+                  <div>
+                    ${state.gameState.timer > 0 ? shuffle(q.options).map(opt => `<button class="answer-btn" onclick="selectAnswer('${opt}')">${opt}</button>`).join('') : `<div style="padding: 2rem; background: #ffcdd220; border-radius: 12px; text-align: center;"><p style="margin: 0; font-weight: 600; color: #b71c1c;">⏱️ Time's Up! Answers Locked</p></div>`}
+                  </div>
+                ` : `
+                  <div class="card" style="background: ${state.players[state.playerId]?.isCorrect ? '#c8e6c920' : '#ffcdd220'}; border: 3px solid ${state.players[state.playerId]?.isCorrect ? '#4caf50' : '#d32f2f'}; text-align: center;">
+                    <h3 style="margin: 0 0 1rem; font-size: 28px; color: ${state.players[state.playerId]?.isCorrect ? '#1b5e20' : '#b71c1c'};">${state.players[state.playerId]?.isCorrect ? '✅ Correct!' : '❌ Incorrect'}</h3>
+                    <p style="margin: 0 0 1rem; color: #333;">Answer: <strong>${q.answer}</strong></p>
+                    ${state.players[state.playerId]?.pointsEarned ? `<p style="margin: 0; font-size: 20px; font-weight: 700; color: ${state.players[state.playerId]?.isCorrect ? '#1b5e20' : '#b71c1c'};">+${state.players[state.playerId].pointsEarned} points!</p>` : ''}
+                  </div>
+                `}
+              ` : ''}
+            </div>
+            <div class="card" style="max-height: 90vh; overflow-y: auto;">
+              <h3 style="margin: 0 0 1.5rem; font-size: 14px; text-transform: uppercase;">🏆 Rankings</h3>
+              ${playersList.map((p, i) => `
+                <div class="leaderboard-item" style="border: ${p.uid === state.playerId ? '2px solid #667eea' : 'unset'};">
+                  <span style="font-weight: 600;">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i+1}. ${p.name}</span>
+                  <span style="font-weight: 700; color: #667eea;">${p.score}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function goHome() { state.screen = 'home'; render(); }
+    function hostSetup() { state.screen = 'host-setup'; state.role = 'host'; render(); }
+    function goJoin() { state.screen = 'join'; render(); }
+
+    function startGameHost() {
+      if (!db) { alert('Firebase not ready'); return; }
+      state.role = 'host';
+      state.screen = 'host-game';
+      const gameState = { phase: 'question', qIndex: 0, timer: 10 };
+      db.ref(`games/${state.gameRoom}`).set(gameState);
+      listenToGame();
+      render();
+    }
+
+    function joinGame() {
+      if (!db) { alert('Firebase not ready'); return; }
+      const room = document.getElementById('joinRoom').value;
+      const name = document.getElementById('playerName').value;
+      if (!name) { alert('Enter a name'); return; }
+      state.gameRoom = room;
+      state.playerName = name;
+      state.playerId = 'p_' + Math.random().toString(36).substr(2, 9);
+      state.role = 'player';
+      db.ref(`players/${state.gameRoom}/${state.playerId}`).set({ uid: state.playerId, name, score: 0, lastAnswer: null, isCorrect: null });
+      state.screen = 'player-game';
+      listenToGame();
+      render();
+    }
+
+    function selectAnswer(answer) {
+      if (!firebaseReady || !db) return;
+      if (state.gameState?.phase !== 'question') return; // Don't allow answers if not in question phase
+      
+      const q = QUESTIONS[state.gameState.qIndex];
+      const isCorrect = answer === q.answer;
+      
+      // Calculate speed bonus (max 10 seconds, bonus points based on time remaining)
+      const timeSpent = 10 - state.gameState.timer;
+      const speedBonus = isCorrect ? Math.max(0, (10 - timeSpent) * 5) : 0; // 5 points per second remaining
+      const basePoints = isCorrect ? 100 : 0;
+      const totalPoints = basePoints + speedBonus;
+      
+      const newScore = (state.players[state.playerId]?.score || 0) + totalPoints;
+      db.ref(`players/${state.gameRoom}/${state.playerId}`).update({ 
+        score: newScore, 
+        lastAnswer: answer, 
+        isCorrect,
+        pointsEarned: totalPoints
+      });
+      db.ref(`games/${state.gameRoom}`).update({ phase: 'reveal' });
+    }
+
+    function nextQuestion() {
+      if (!db) return;
+      if (state.gameState.qIndex + 1 < QUESTIONS.length) {
+        db.ref(`games/${state.gameRoom}`).update({ phase: 'question', qIndex: state.gameState.qIndex + 1, timer: 10 });
+      }
+    }
+
+    function listenToGame() {
+      if (!db) return;
+      db.ref(`games/${state.gameRoom}`).on('value', (snap) => { 
+        const oldPhase = state.gameState?.phase;
+        state.gameState = snap.val();
+        // Only re-render if phase changed, not on every timer tick
+        if (oldPhase !== state.gameState?.phase) {
+          render();
+        } else {
+          // Just update timer display
+          updateTimerDisplay();
+        }
+      });
+      db.ref(`players/${state.gameRoom}`).on('value', (snap) => { state.players = snap.val() || {}; render(); });
+    }
+
+    function updateTimerDisplay() {
+      const timerEl = document.querySelector('.timer');
+      if (timerEl && state.gameState?.timer !== undefined) {
+        timerEl.textContent = state.gameState.timer;
+        timerEl.style.color = state.gameState.timer <= 3 ? '#ff6b6b' : '#667eea';
+      }
+    }
+
+    setInterval(() => {
+      if (!db || !state.gameState?.phase) return;
+      if (state.gameState.phase === 'question' && state.gameState.timer > 0) {
+        db.ref(`games/${state.gameRoom}/timer`).set(state.gameState.timer - 1);
+      }
+    }, 1000);
+
+    render();
+  </script>
+</body>
+</html>
