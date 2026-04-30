@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Night Pro</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f8f5; color: #1a1a1a; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f0f0f; color: #ffffff; }
+      input, select, textarea { background: #1a1a1a; color: #ffffff; border-color: #333; }
+    }
+    input, select, textarea { 
+      font-family: inherit; 
+      border: 1px solid #e0e0e0; 
+      border-radius: 8px; 
+      padding: 10px; 
+      font-size: 14px;
+    }
+    button { font-family: inherit; font-size: 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    @media (prefers-color-scheme: dark) {
+      input:focus, select:focus, textarea:focus { outline: none; border-color: #378add; background: #1a1a1a; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const SoundEngine = (() => {
+  const audioContext = typeof window !== 'undefined' && window.AudioContext ? new (window.AudioContext || window.webkitAudioContext)() : null;
+  return {
+    buzz: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    },
+    correct: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [0, 0.1, 0.2].forEach(delay => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.setValueAtTime(800 + delay * 200, now);
+        gain.gain.setValueAtTime(0.2, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0, now + delay + 0.15);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.15);
+      });
+    },
+    incorrect: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    },
+    tada: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [1046.5, 1318.51, 1567.98].forEach((freq, i) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.setValueAtTime(freq, now + i * 0.1);
+        gain.gain.setValueAtTime(0.2, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0, now + i * 0.1 + 0.2);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.2);
+      });
+    },
+    countdown: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.frequency.setValueAtTime(1200, now);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    },
+  };
+})();
+
+const EXTENDED_QUESTIONS = [
+  { id: 1, question: 'What is the capital of France?', answer: 'Paris', category: 'Geography', difficulty: 'Easy' },
+  { id: 2, question: 'Which planet is closest to the Sun?', answer: 'Mercury', category: 'Science', difficulty: 'Easy' },
+  { id: 3, question: 'Who wrote "To Kill a Mockingbird"?', answer: 'Harper Lee', category: 'Literature', difficulty: 'Medium' },
+  { id: 4, question: 'What is the chemical formula for salt?', answer: 'NaCl', category: 'Science', difficulty: 'Medium' },
+  { id: 5, question: 'In what year did the Titanic sink?', answer: '1912', category: 'History', difficulty: 'Medium' },
+  { id: 6, question: 'What is the capital of Japan?', answer: 'Tokyo', category: 'Geography', difficulty: 'Easy' },
+  { id: 7, question: 'How many strings does a violin have?', answer: '4', category: 'Arts', difficulty: 'Easy' },
+  { id: 8, question: 'What is the smallest prime number?', answer: '2', category: 'Math', difficulty: 'Easy' },
+  { id: 9, question: 'Who painted the Mona Lisa?', answer: 'Leonardo da Vinci', category: 'Arts', difficulty: 'Medium' },
+  { id: 10, question: 'What is the speed of light in vacuum?', answer: '299,792,458 meters per second', category: 'Science', difficulty: 'Hard' },
+  { id: 11, question: 'How many bones are in the human body?', answer: '206', category: 'Biology', difficulty: 'Medium' },
+  { id: 12, question: 'What is the largest ocean on Earth?', answer: 'Pacific Ocean', category: 'Geography', difficulty: 'Easy' },
+  { id: 13, question: 'Who was the first President of the United States?', answer: 'George Washington', category: 'History', difficulty: 'Easy' },
+  { id: 14, question: 'What is the smallest country in the world?', answer: 'Vatican City', category: 'Geography', difficulty: 'Medium' },
+  { id: 15, question: 'How many sides does a hexagon have?', answer: '6', category: 'Math', difficulty: 'Easy' },
+];
+
+function TriviaApp() {
+  const [screen, setScreen] = React.useState('home');
+  const [gameMode, setGameMode] = React.useState(null);
+  const [role, setRole] = React.useState(null);
+  const [playerName, setPlayerName] = React.useState('');
+  const [playerId, setPlayerId] = React.useState(null);
+  
+  const [questions, setQuestions] = React.useState(EXTENDED_QUESTIONS);
+  const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [selectedDifficulty, setSelectedDifficulty] = React.useState('All');
+  const [players, setPlayers] = React.useState({});
+  const [gameHistory, setGameHistory] = React.useState(() => JSON.parse(localStorage.getItem('trivia-history') || '[]'));
+  const [playerStats, setPlayerStats] = React.useState(() => JSON.parse(localStorage.getItem('trivia-stats') || '{}'));
+  
+  const [gameState, setGameState] = React.useState({
+    phase: 'setup',
+    questionIndex: -1,
+    timer: 10,
+    buzzedPlayer: null,
+    correctAnswer: null,
+    playerAnswer: null,
+    selectedAnswer: null,
+    answerSubmitted: false,
+    streak: 0,
+    multiplier: 1,
+  });
+
+  const [gameSettings, setGameSettings] = React.useState({
+    timerLength: 10,
+    pointsPerQuestion: 100,
+    maxQuestions: 10,
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('trivia-history', JSON.stringify(gameHistory));
+    localStorage.setItem('trivia-stats', JSON.stringify(playerStats));
+  }, [gameHistory, playerStats]);
+
+  const initializePlayer = (name) => {
+    const uid = 'player_' + Math.random().toString(36).substr(2, 9);
+    setPlayerId(uid);
+    setPlayerName(name);
+    setPlayers(prev => ({ ...prev, [uid]: { name, score: 0, uid, answers: [], streak: 0 } }));
+    if (!playerStats[name]) {
+      setPlayerStats(prev => ({ ...prev, [name]: { gamesPlayed: 0, totalScore: 0, correctAnswers: 0 } }));
+    }
+    SoundEngine.buzz();
+  };
+
+  const startGame = () => {
+    setGameState({
+      phase: 'question',
+      questionIndex: 0,
+      timer: gameSettings.timerLength,
+      buzzedPlayer: null,
+      correctAnswer: null,
+      playerAnswer: null,
+      selectedAnswer: null,
+      answerSubmitted: false,
+      streak: 0,
+      multiplier: 1,
+    });
+    SoundEngine.tada();
+  };
+
+  const getFilteredQuestions = () => {
+    let filtered = questions;
+    if (selectedCategory !== 'All') filtered = filtered.filter(q => q.category === selectedCategory);
+    if (selectedDifficulty !== 'All') filtered = filtered.filter(q => q.difficulty === selectedDifficulty);
+    return filtered.slice(0, gameSettings.maxQuestions);
+  };
+
+  const currentQuestion = getFilteredQuestions()[gameState.questionIndex];
+
+  React.useEffect(() => {
+    if (gameState.phase === 'question' && gameState.timer > 0) {
+      const timer = setTimeout(() => {
+        if (gameState.timer === 4) SoundEngine.countdown();
+        setGameState(prev => ({ ...prev, timer: prev.timer - 1 }));
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    if (gameState.phase === 'question' && gameState.timer === 0) {
+      setGameState(prev => ({ ...prev, phase: 'reveal', correctAnswer: currentQuestion?.answer }));
+    }
+  }, [gameState.phase, gameState.timer, currentQuestion]);
+
+  const handleBuzz = () => {
+    if (gameState.phase === 'question' && !gameState.buzzedPlayer && gameState.timer > 0) {
+      setGameState(prev => ({ ...prev, phase: 'buzz', buzzedPlayer: playerId, timer: 5 }));
+      SoundEngine.buzz();
+    }
+  };
+
+  const submitAnswer = (answer) => {
+    if (gameState.answerSubmitted) return;
+    const isCorrect = answer.toLowerCase().trim() === currentQuestion?.answer.toLowerCase().trim();
+    
+    const pointsEarned = isCorrect ? gameSettings.pointsPerQuestion * gameState.multiplier : 0;
+    const newStreak = isCorrect ? gameState.streak + 1 : 0;
+    const newMultiplier = newStreak >= 3 ? 2 : newStreak >= 1 ? 1.5 : 1;
+
+    setGameState(prev => ({
+      ...prev,
+      phase: 'reveal',
+      selectedAnswer: answer,
+      answerSubmitted: true,
+      playerAnswer: isCorrect ? answer : null,
+      correctAnswer: currentQuestion?.answer,
+      streak: newStreak,
+      multiplier: newMultiplier,
+    }));
+    
+    if (isCorrect) {
+      SoundEngine.correct();
+      setPlayers(prev => ({
+        ...prev,
+        [playerId]: { 
+          ...prev[playerId], 
+          score: prev[playerId].score + pointsEarned,
+          answers: [...(prev[playerId]?.answers || []), { q: currentQuestion.question, correct: true, points: pointsEarned }],
+          streak: newStreak,
+        },
+      }));
+      setPlayerStats(prev => ({
+        ...prev,
+        [playerName]: {
+          ...prev[playerName],
+          correctAnswers: (prev[playerName]?.correctAnswers || 0) + 1,
+        }
+      }));
+    } else {
+      SoundEngine.incorrect();
+      setPlayers(prev => ({
+        ...prev,
+        [playerId]: { ...prev[playerId], answers: [...(prev[playerId]?.answers || []), { q: currentQuestion.question, correct: false, points: 0 }] },
+      }));
+    }
+  };
+
+  const nextQuestion = () => {
+    const filtered = getFilteredQuestions();
+    const nextIdx = gameState.questionIndex + 1;
+    if (nextIdx < filtered.length) {
+      setGameState({
+        phase: 'question',
+        questionIndex: nextIdx,
+        timer: gameSettings.timerLength,
+        buzzedPlayer: null,
+        correctAnswer: null,
+        playerAnswer: null,
+        selectedAnswer: null,
+        answerSubmitted: false,
+        streak: gameState.streak,
+        multiplier: gameState.multiplier,
+      });
+    } else {
+      endGame();
+    }
+  };
+
+  const endGame = () => {
+    const playersList = Object.values(players).sort((a, b) => b.score - a.score);
+    const winner = playersList[0];
+    
+    setGameHistory(prev => [...prev, { 
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString(),
+      winner: winner?.name, 
+      winnerScore: winner?.score,
+      category: selectedCategory,
+      totalPlayers: Object.keys(players).length,
+      scores: playersList,
+    }]);
+
+    setPlayerStats(prev => ({
+      ...prev,
+      [playerName]: {
+        ...prev[playerName],
+        gamesPlayed: (prev[playerName]?.gamesPlayed || 0) + 1,
+        totalScore: (prev[playerName]?.totalScore || 0) + (players[playerId]?.score || 0),
+      }
+    }));
+
+    setGameState(prev => ({ ...prev, phase: 'final' }));
+  };
+
+  const resetGame = () => {
+    setScreen('home');
+    setGameMode(null);
+    setRole(null);
+    setPlayerName('');
+    setPlayerId(null);
+    setPlayers({});
+    setGameState({ phase: 'setup', questionIndex: -1, timer: 10, buzzedPlayer: null, correctAnswer: null, playerAnswer: null, selectedAnswer: null, answerSubmitted: false, streak: 0, multiplier: 1 });
+  };
+
+  const categories = ['All', ...new Set(questions.map(q => q.category))];
+  const difficulties = ['All', 'Easy', 'Medium', 'Hard'];
+  const playersList = Object.values(players).sort((a, b) => b.score - a.score);
+
+  // HOME
+  if (screen === 'home') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+            <h1 style={{ fontSize: '56px', fontWeight: 500, margin: '0 0 0.5rem', letterSpacing: '-2px' }}>Trivia Night Pro</h1>
+            <p style={{ fontSize: '18px', color: '#666', margin: '0' }}>The ultimate multiplayer trivia platform</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '2rem' }}>
+            <button onClick={() => { setGameMode('classic'); setRole('host'); setScreen('game-setup'); }} style={{ padding: '16px', fontSize: '14px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px' }}>
+              Host Game
+            </button>
+            <button onClick={() => { setGameMode('classic'); setRole('player'); setScreen('join-game'); }} style={{ padding: '16px', fontSize: '14px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px' }}>
+              Join Game
+            </button>
+            <button onClick={() => setScreen('stats')} style={{ padding: '16px', fontSize: '14px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px' }}>
+              Stats
+            </button>
+            <button onClick={() => setScreen('leaderboard')} style={{ padding: '16px', fontSize: '14px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px' }}>
+              Leaderboard
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '12px', color: '#666' }}>Total Questions</p>
+              <p style={{ margin: '0', fontSize: '32px', fontWeight: 500 }}>{questions.length}</p>
+            </div>
+            <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '12px', color: '#666' }}>Categories</p>
+              <p style={{ margin: '0', fontSize: '32px', fontWeight: 500 }}>{categories.length - 1}</p>
+            </div>
+            <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '12px', color: '#666' }}>Games Played</p>
+              <p style={{ margin: '0', fontSize: '32px', fontWeight: 500 }}>{gameHistory.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // GAME SETUP
+  if (screen === 'game-setup') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 500, margin: '0 0 2rem' }}>Game Settings</h2>
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>Category</label>
+            <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} style={{ width: '100%' }}>
+              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>Difficulty</label>
+            <select value={selectedDifficulty} onChange={(e) => setSelectedDifficulty(e.target.value)} style={{ width: '100%' }}>
+              {difficulties.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '2rem' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '8px' }}>Questions ({gameSettings.maxQuestions})</label>
+            <input type="range" min="5" max="20" value={gameSettings.maxQuestions} onChange={(e) => setGameSettings({ ...gameSettings, maxQuestions: parseInt(e.target.value) })} style={{ width: '100%' }} />
+          </div>
+
+          <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2rem' }}>Available: {getFilteredQuestions().length} questions</p>
+
+          <button onClick={() => { startGame(); setScreen('host-game'); }} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px', marginBottom: '8px', cursor: 'pointer' }}>
+            Start Game
+          </button>
+          
+          <button onClick={() => setScreen('home')} style={{ width: '100%', padding: '12px', fontSize: '14px', background: 'transparent', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // JOIN GAME
+  if (screen === 'join-game') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 500, margin: '0 0 2rem' }}>Join Game</h2>
+          <input type="text" placeholder="Your name" value={playerName} onChange={(e) => setPlayerName(e.target.value)} style={{ width: '100%', marginBottom: '1rem' }} />
+          <button onClick={() => { initializePlayer(playerName); setScreen('player-waiting'); }} disabled={!playerName} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: playerName ? '#378add' : '#ccc', color: playerName ? 'white' : '#999', border: 'none', borderRadius: '8px', cursor: playerName ? 'pointer' : 'not-allowed', marginBottom: '1rem' }}>
+            Join Game
+          </button>
+          <button onClick={() => setScreen('home')} style={{ width: '100%', padding: '12px', fontSize: '14px', background: 'transparent', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // PLAYER WAITING
+  if (screen === 'player-waiting') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem', textAlign: 'center' }}>
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 500, margin: '0 0 1rem' }}>Waiting for host...</h2>
+          <p style={{ color: '#666', margin: '0 0 2rem' }}>{playerName}, you're ready!</p>
+          <button onClick={() => { setScreen('player-game'); startGame(); }} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', marginBottom: '1rem' }}>
+            Start Game (Demo)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // HOST GAME
+  if (screen === 'host-game') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '1.5rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+        <div style={{ padding: '2rem', background: '#f0f0f0', borderRadius: '8px' }}>
+          {gameState.phase === 'question' && currentQuestion && (
+            <>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '12px', color: '#666' }}>Q{gameState.questionIndex + 1}/{getFilteredQuestions().length} {currentQuestion.difficulty}</p>
+              <h2 style={{ margin: '0 0 2rem', fontSize: '22px', fontWeight: 500 }}>{currentQuestion.question}</h2>
+              <div style={{ fontSize: '72px', fontWeight: 500, textAlign: 'center', color: gameState.timer <= 3 ? '#d32f2f' : '#378add', margin: '2rem 0' }}>
+                {gameState.timer}
+              </div>
+              {gameState.buzzedPlayer && <div style={{ padding: '1rem', background: '#378add', color: 'white', borderRadius: '8px', textAlign: 'center', fontWeight: 500 }}>Buzzed: {players[gameState.buzzedPlayer]?.name}</div>}
+            </>
+          )}
+          
+          {gameState.phase === 'reveal' && currentQuestion && (
+            <>
+              <h3 style={{ margin: '0 0 1rem', fontSize: '16px' }}>Correct Answer</h3>
+              <div style={{ padding: '1rem', background: '#fff3cd', color: '#856404', borderRadius: '8px', fontSize: '18px', fontWeight: 500, marginBottom: '1.5rem' }}>
+                {currentQuestion.answer}
+              </div>
+              <button onClick={nextQuestion} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                Next Question
+              </button>
+            </>
+          )}
+
+          {gameState.phase === 'final' && (
+            <>
+              <h2 style={{ textAlign: 'center', fontSize: '32px', fontWeight: 500, margin: '2rem 0' }}>Game Over!</h2>
+              <div style={{ padding: '1rem', background: '#378add', color: 'white', borderRadius: '8px', textAlign: 'center', marginBottom: '1.5rem' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '12px' }}>Champion</p>
+                <p style={{ margin: '0', fontSize: '20px', fontWeight: 500 }}>{playersList[0]?.name}: {Math.round(playersList[0]?.score || 0)} pts</p>
+              </div>
+              <button onClick={resetGame} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}>
+                New Game
+              </button>
+            </>
+          )}
+        </div>
+
+        <div>
+          <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '14px', fontWeight: 500 }}>Live Scoreboard</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+              {playersList.length === 0 ? <p style={{ margin: '0', fontSize: '13px', color: '#666' }}>No players</p> : playersList.map((p, i) => <div key={p.uid} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: 'white', borderRadius: '6px', border: '0.5px solid #ddd', fontSize: '13px' }}><span style={{ fontWeight: 500 }}>{i + 1}. {p.name}{p.streak > 0 ? ` 🔥${p.streak}` : ''}</span><span style={{ fontWeight: 500 }}>{Math.round(p.score)}</span></div>)}
+            </div>
+          </div>
+
+          {gameState.phase === 'question' && (
+            <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px' }}>
+              <h3 style={{ margin: '0 0 1rem', fontSize: '14px', fontWeight: 500 }}>Host Controls</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {gameState.buzzedPlayer && <button onClick={() => setGameState(prev => ({ ...prev, buzzedPlayer: null, phase: 'question' }))} style={{ padding: '8px', fontSize: '12px', background: 'white', border: '1px solid #ddd', borderRadius: '6px', cursor: 'pointer' }}>Clear Buzz</button>}
+                <button onClick={() => setGameState(prev => ({ ...prev, phase: 'reveal', correctAnswer: currentQuestion?.answer }))} style={{ padding: '8px', fontSize: '12px', background: 'white', border: '1px solid #ddd', borderRadius: '6px', cursor: 'pointer' }}>Reveal</button>
+                <button onClick={nextQuestion} style={{ padding: '8px', fontSize: '12px', background: 'white', border: '1px solid #ddd', borderRadius: '6px', cursor: 'pointer' }}>Skip</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // PLAYER GAME
+  if (screen === 'player-game') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', padding: '1rem', background: '#f0f0f0', borderRadius: '8px' }}>
+            <div>
+              <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>Your Score</p>
+              <p style={{ margin: '0', fontSize: '24px', fontWeight: 500 }}>{Math.round(players[playerId]?.score || 0)}</p>
+            </div>
+            {gameState.streak > 0 && <p style={{ margin: '0', fontSize: '20px', fontWeight: 500 }}>🔥 {gameState.streak} Streak</p>}
+            <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>{playerName}</p>
+          </div>
+
+          {gameState.phase === 'question' && currentQuestion && (
+            <>
+              <div style={{ padding: '1.5rem', background: '#f0f0f0', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                <p style={{ margin: '0 0 1rem', fontSize: '12px', color: '#666' }}>Question {gameState.questionIndex + 1} of {getFilteredQuestions().length} • {currentQuestion.difficulty}</p>
+                <h2 style={{ margin: '0', fontSize: '20px', fontWeight: 500 }}>{currentQuestion.question}</h2>
+              </div>
+
+              <div style={{ fontSize: '56px', fontWeight: 500, textAlign: 'center', color: gameState.timer <= 3 ? '#d32f2f' : '#378add', marginBottom: '2rem' }}>
+                {gameState.timer}s
+              </div>
+
+              <button onClick={handleBuzz} disabled={gameState.buzzedPlayer !== null} style={{ width: '100%', padding: '16px', fontSize: '18px', fontWeight: 500, background: gameState.buzzedPlayer === playerId ? '#4caf50' : '#378add', color: 'white', border: 'none', borderRadius: '8px', cursor: gameState.buzzedPlayer ? 'not-allowed' : 'pointer', opacity: gameState.buzzedPlayer && gameState.buzzedPlayer !== playerId ? 0.5 : 1 }}>
+                {gameState.buzzedPlayer === playerId ? 'Buzzed In!' : 'Buzz In'}
+              </button>
+            </>
+          )}
+
+          {gameState.phase === 'buzz' && gameState.buzzedPlayer === playerId && (
+            <>
+              <p style={{ margin: '0 0 1rem', fontSize: '14px', color: '#666' }}>Answer quickly!</p>
+              <input type="text" placeholder="Your answer..." onKeyPress={(e) => { if (e.key === 'Enter') submitAnswer(e.target.value); }} autoFocus style={{ width: '100%', marginBottom: '1rem' }} id="answerInput" />
+              <button onClick={() => submitAnswer(document.getElementById('answerInput').value)} style={{ width: '100%', padding: '12px', fontSize: '16px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                Submit
+              </button>
+            </>
+          )}
+
+          {gameState.phase === 'reveal' && (
+            <div style={{ padding: '1.5rem', background: gameState.playerAnswer ? '#c8e6c9' : '#f0f0f0', color: gameState.playerAnswer ? '#1b5e20' : '#000', borderRadius: '8px' }}>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '14px' }}>{gameState.playerAnswer ? '✓ Correct!' : '✗ Incorrect'}</p>
+              <p style={{ margin: '0', fontSize: '16px', fontWeight: 500 }}>Answer: {gameState.correctAnswer}</p>
+            </div>
+          )}
+
+          {gameState.phase === 'final' && (
+            <div style={{ textAlign: 'center', padding: '2rem' }}>
+              <h2 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 1rem' }}>Game Over!</h2>
+              <p style={{ fontSize: '20px', fontWeight: 500, margin: '0 0 2rem' }}>Final Score: {Math.round(players[playerId]?.score || 0)}</p>
+              <button onClick={resetGame} style={{ padding: '12px 24px', fontSize: '16px', fontWeight: 500, background: '#378add', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                Back Home
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // STATS
+  if (screen === 'stats') {
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 2rem' }}>Your Statistics</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '2rem' }}>
+            {Object.entries(playerStats).map(([name, stats]) => (
+              <div key={name} style={{ padding: '1rem', background: '#f0f0f0', borderRadius: '8px' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '12px', color: '#666' }}>{name}</p>
+                <p style={{ margin: '0', fontSize: '14px', fontWeight: 500 }}>Games: {stats.gamesPlayed} | Score: {Math.round(stats.totalScore)}</p>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => setScreen('home')} style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer' }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // LEADERBOARD
+  if (screen === 'leaderboard') {
+    const topPlayers = Object.entries(playerStats)
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a, b) => b.totalScore - a.totalScore);
+
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 2rem' }}>All-Time Leaderboard</h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {topPlayers.map((player, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f0f0f0', borderRadius: '8px', border: idx === 0 ? '2px solid #378add' : '0.5px solid #ddd' }}>
+                <div style={{ width: '36px', height: '36px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: '14px' }}>
+                  {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : idx + 1}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0', fontWeight: 500, fontSize: '14px' }}>{player.name}</p>
+                  <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>{player.gamesPlayed} games • {Math.round(player.totalScore)} total points</p>
+                </div>
+                <p style={{ margin: '0', fontSize: '16px', fontWeight: 500 }}>{Math.round(player.totalScore)}</p>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => setScreen('home')} style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 500, background: '#f0f0f0', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', marginTop: '2rem' }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+ReactDOM.render(<TriviaApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
