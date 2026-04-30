@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Night Pro</title>
+  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    
+    body { 
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+    
+    input, select, textarea { 
+      font-family: inherit; 
+      border: 2px solid #ddd;
+      border-radius: 12px; 
+      padding: 12px 16px; 
+      font-size: 14px;
+      transition: all 0.3s;
+      background: white;
+    }
+    
+    input:focus, select:focus, textarea:focus { 
+      outline: none; 
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    button { 
+      font-family: inherit; 
+      font-size: 14px; 
+      border-radius: 12px; 
+      cursor: pointer; 
+      transition: all 0.3s ease;
+      font-weight: 500;
+      border: none;
+    }
+    
+    button:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+    
+    .primary-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 14px 28px;
+    }
+    
+    .secondary-btn {
+      background: rgba(255, 255, 255, 0.9);
+      color: #667eea;
+      padding: 14px 28px;
+      border: 2px solid #667eea;
+    }
+    
+    .answer-btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 16px;
+      width: 100%;
+      text-align: left;
+      font-size: 15px;
+      transition: all 0.3s;
+    }
+    
+    .answer-btn:hover:not(:disabled) { 
+      transform: translateX(10px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    }
+    
+    .answer-btn.selected {
+      background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+    }
+    
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      animation: slideUp 0.5s ease;
+    }
+    
+    .timer-display {
+      font-size: 72px;
+      font-weight: 700;
+      text-align: center;
+      animation: pulse 1s infinite;
+    }
+    
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #f5f7ff 0%, #fff 100%);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border-left: 4px solid #667eea;
+      transition: all 0.3s;
+    }
+    
+    .leaderboard-item:hover {
+      transform: translateX(5px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+    }
+    
+    .rank-badge {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 16px;
+      margin-right: 12px;
+      color: white;
+    }
+    
+    .rank-badge.top1 { background: #ffd700; color: #333; }
+    .rank-badge.top2 { background: #c0c0c0; color: #333; }
+    .rank-badge.top3 { background: #cd7f32; }
+    .rank-badge.other { background: #667eea; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+// Firebase Config - Ready to go! ✅
+const firebaseConfig = {
+  apiKey: "AIzaSyDzyj3uiCFo7uSFwQHtJz3PkC3m2a7FTI",
+  authDomain: "il-trivia-game.firebaseapp.com",
+  databaseURL: "https://il-trivia-game-default-rtdb.firebaseio.com",
+  projectId: "il-trivia-game",
+  storageBucket: "il-trivia-game.firebasestorage.app",
+  messagingSenderId: "391298129489",
+  appId: "1:391298129489:web:2cb1cf17171401sd0be270",
+  measurementId: "G-HN5K2YPQHY"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+const SoundEngine = (() => {
+  const audioContext = typeof window !== 'undefined' && window.AudioContext ? new (window.AudioContext || window.webkitAudioContext)() : null;
+  return {
+    buzz: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    },
+    correct: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [0, 0.1, 0.2].forEach(delay => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.setValueAtTime(800 + delay * 200, now);
+        gain.gain.setValueAtTime(0.2, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0, now + delay + 0.15);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.15);
+      });
+    },
+    incorrect: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    },
+    tada: () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [1046.5, 1318.51, 1567.98].forEach((freq, i) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.setValueAtTime(freq, now + i * 0.1);
+        gain.gain.setValueAtTime(0.2, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0, now + i * 0.1 + 0.2);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.2);
+      });
+    },
+  };
+})();
+
+const QUESTIONS = [
+  { id: 1, question: 'What is the capital of France?', answer: 'Paris', options: ['London', 'Paris', 'Berlin', 'Madrid'] },
+  { id: 2, question: 'Which planet is closest to the Sun?', answer: 'Mercury', options: ['Venus', 'Mercury', 'Earth', 'Mars'] },
+  { id: 3, question: 'Who wrote "To Kill a Mockingbird"?', answer: 'Harper Lee', options: ['Harper Lee', 'Mark Twain', 'Ernest Hemingway', 'F. Scott Fitzgerald'] },
+  { id: 4, question: 'What is the chemical formula for salt?', answer: 'NaCl', options: ['NaCl', 'KCl', 'CaCl', 'MgCl'] },
+  { id: 5, question: 'In what year did the Titanic sink?', answer: '1912', options: ['1905', '1912', '1920', '1898'] },
+  { id: 6, question: 'What is the capital of Japan?', answer: 'Tokyo', options: ['Osaka', 'Kyoto', 'Tokyo', 'Yokohama'] },
+  { id: 7, question: 'How many strings does a violin have?', answer: '4', options: ['6', '5', '4', '3'] },
+  { id: 8, question: 'What is the smallest prime number?', answer: '2', options: ['1', '2', '3', '4'] },
+  { id: 9, question: 'Who painted the Mona Lisa?', answer: 'Leonardo da Vinci', options: ['Michelangelo', 'Leonardo da Vinci', 'Raphael', 'Donatello'] },
+  { id: 10, question: 'What is the largest ocean?', answer: 'Pacific', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'] },
+  { id: 11, question: 'How many bones in human body?', answer: '206', options: ['186', '206', '226', '246'] },
+  { id: 12, question: 'What is the smallest country?', answer: 'Vatican City', options: ['Monaco', 'Liechtenstein', 'Malta', 'Vatican City'] },
+  { id: 13, question: 'Who was first US President?', answer: 'George Washington', options: ['Thomas Jefferson', 'George Washington', 'John Adams', 'Benjamin Franklin'] },
+  { id: 14, question: 'What is the fastest land animal?', answer: 'Cheetah', options: ['Lion', 'Cheetah', 'Gazelle', 'Greyhound'] },
+  { id: 15, question: 'How many sides does a hexagon have?', answer: '6', options: ['5', '6', '7', '8'] },
+];
+
+function shuffleOptions(options) {
+  return [...options].sort(() => Math.random() - 0.5);
+}
+
+function TriviaApp() {
+  const [screen, setScreen] = React.useState('home');
+  const [playerName, setPlayerName] = React.useState('');
+  const [playerId, setPlayerId] = React.useState(null);
+  const [role, setRole] = React.useState(null);
+  const [gameRoom, setGameRoom] = React.useState('game1');
+  const [gameState, setGameState] = React.useState(null);
+  const [players, setPlayers] = React.useState({});
+  const [playerAnswer, setPlayerAnswer] = React.useState(null);
+  const [playerAnswered, setPlayerAnswered] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  const allQuestions = QUESTIONS.slice(0, gameState?.numQuestions || 10);
+  const currentQ = allQuestions[gameState?.qIndex || 0];
+  const shuffledOptions = currentQ ? shuffleOptions(currentQ.options) : [];
+
+  // Listen to game state changes
+  React.useEffect(() => {
+    if (!gameRoom) return;
+    const gameRef = database.ref(`games/${gameRoom}`);
+    gameRef.on('value', (snapshot) => {
+      setGameState(snapshot.val());
+    });
+    return () => gameRef.off();
+  }, [gameRoom]);
+
+  // Listen to player changes
+  React.useEffect(() => {
+    if (!gameRoom) return;
+    const playersRef = database.ref(`players/${gameRoom}`);
+    playersRef.on('value', (snapshot) => {
+      setPlayers(snapshot.val() || {});
+    });
+    return () => playersRef.off();
+  }, [gameRoom]);
+
+  // Timer countdown
+  React.useEffect(() => {
+    if (gameState?.phase !== 'question' || gameState.timer <= 0) return;
+    const timer = setTimeout(() => {
+      if (gameState.timer > 1) {
+        database.ref(`games/${gameRoom}/timer`).set(gameState.timer - 1);
+      } else {
+        database.ref(`games/${gameRoom}`).update({ phase: 'reveal' });
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [gameState?.phase, gameState?.timer, gameRoom]);
+
+  const startGame = () => {
+    const initialState = {
+      phase: 'question',
+      qIndex: 0,
+      timer: 10,
+      timerLength: 10,
+      numQuestions: 10,
+    };
+    database.ref(`games/${gameRoom}`).set(initialState);
+    setPlayerAnswer(null);
+    setPlayerAnswered(false);
+  };
+
+  const selectAnswer = (selected) => {
+    if (gameState?.phase !== 'question' || playerAnswered) return;
+    
+    const isCorrect = selected === currentQ.answer;
+    setPlayerAnswer(selected);
+    setPlayerAnswered(true);
+    
+    if (isCorrect) {
+      SoundEngine.correct();
+    } else {
+      SoundEngine.incorrect();
+    }
+
+    const newScore = (players[playerId]?.score || 0) + (isCorrect ? 100 : 0);
+    database.ref(`players/${gameRoom}/${playerId}`).update({
+      score: newScore,
+      lastAnswer: selected,
+      isCorrect: isCorrect,
+    });
+
+    database.ref(`games/${gameRoom}`).update({ phase: 'reveal' });
+  };
+
+  const nextQ = () => {
+    if (gameState.qIndex + 1 < allQuestions.length) {
+      database.ref(`games/${gameRoom}`).update({
+        phase: 'question',
+        qIndex: gameState.qIndex + 1,
+        timer: gameState.timerLength,
+      });
+      setPlayerAnswer(null);
+      setPlayerAnswered(false);
+    } else {
+      database.ref(`games/${gameRoom}`).update({ phase: 'final' });
+    }
+  };
+
+  const reset = () => {
+    database.ref(`games/${gameRoom}`).remove();
+    database.ref(`players/${gameRoom}`).remove();
+    setScreen('home');
+    setPlayerName('');
+    setPlayerId(null);
+    setRole(null);
+    setPlayerAnswer(null);
+    setPlayerAnswered(false);
+  };
+
+  if (error) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div className="card" style={{ maxWidth: '500px' }}>
+          <h2 style={{ color: '#d32f2f', margin: '0 0 1rem' }}>Connection Error</h2>
+          <p style={{ color: '#666', margin: '0 0 1.5rem' }}>{error}</p>
+          <p style={{ fontSize: '14px', color: '#999', margin: '0' }}>Make sure Firebase is configured correctly in the code.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // HOME
+  if (screen === 'home') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div style={{ textAlign: 'center', maxWidth: '600px' }}>
+          <h1 style={{ fontSize: '56px', fontWeight: 700, margin: '0 0 1rem', color: 'white', textShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+            🎮 Trivia Night Pro
+          </h1>
+          <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.9)', margin: '0 0 3rem' }}>
+            Firebase Multiplayer Edition
+          </p>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', maxWidth: '400px', margin: '0 auto' }}>
+            <button onClick={() => { setRole('host'); setScreen('host-setup'); }} className="primary-btn" style={{ fontSize: '15px', fontWeight: 600 }}>
+              🎯 Host Game
+            </button>
+            <button onClick={() => setScreen('join')} className="secondary-btn" style={{ fontSize: '15px', fontWeight: 600 }}>
+              👥 Join Game
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // HOST SETUP
+  if (screen === 'host-setup') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div className="card" style={{ maxWidth: '500px', width: '100%' }}>
+          <h2 style={{ fontSize: '32px', fontWeight: 700, margin: '0 0 2rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
+            ⚙️ Game Setup
+          </h2>
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#333' }}>Room Code</label>
+            <input type="text" value={gameRoom} onChange={(e) => setGameRoom(e.target.value)} placeholder="game1" style={{ width: '100%' }} />
+            <p style={{ fontSize: '12px', color: '#999', margin: '6px 0 0' }}>Give this to players</p>
+          </div>
+
+          <button onClick={() => { startGame(); setScreen('host'); }} className="primary-btn" style={{ width: '100%', marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
+            Start Game
+          </button>
+          <button onClick={() => setScreen('home')} className="secondary-btn" style={{ width: '100%', fontSize: '16px', fontWeight: 600 }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // HOST GAME
+  if (screen === 'host' && role === 'host') {
+    const playersList = Object.values(players || {}).sort((a, b) => b.score - a.score);
+    const timerColor = gameState?.timer <= 3 ? '#ff6b6b' : '#667eea';
+    
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem', alignItems: 'start' }}>
+        <div className="card" style={{ minHeight: '600px' }}>
+          {gameState?.phase === 'question' && currentQ && (
+            <>
+              <div style={{ marginBottom: '2rem' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '13px', color: '#999', textTransform: 'uppercase', fontWeight: 600 }}>Question {gameState.qIndex + 1} of {allQuestions.length}</p>
+                <h2 style={{ margin: '0', fontSize: '28px', fontWeight: 700, color: '#333' }}>{currentQ.question}</h2>
+              </div>
+              <div style={{ textAlign: 'center', padding: '2rem', background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)', borderRadius: '16px', marginBottom: '2rem' }}>
+                <div className="timer-display" style={{ color: timerColor }}>
+                  {gameState.timer}
+                </div>
+              </div>
+              <p style={{ color: '#999', fontSize: '14px', textAlign: 'center', margin: '0' }}>
+                {Object.values(players || {}).filter(p => p.lastAnswer).length}/{Object.keys(players || {}).length} answered
+              </p>
+            </>
+          )}
+          
+          {gameState?.phase === 'reveal' && currentQ && (
+            <>
+              <h3 style={{ margin: '0 0 1.5rem', fontSize: '18px', fontWeight: 600, color: '#999' }}>Correct Answer</h3>
+              <div style={{ padding: '2rem', background: 'linear-gradient(135deg, #ffd70015 0%, #ffd70030 100%)', border: '3px solid #ffd700', borderRadius: '16px', marginBottom: '2rem' }}>
+                <p style={{ fontSize: '24px', fontWeight: 700, color: '#333', margin: '0' }}>{currentQ.answer}</p>
+              </div>
+              <button onClick={nextQ} className="primary-btn" style={{ width: '100%', fontSize: '16px', fontWeight: 600 }}>
+                Next Question →
+              </button>
+            </>
+          )}
+
+          {gameState?.phase === 'final' && (
+            <>
+              <h2 style={{ textAlign: 'center', fontSize: '48px', fontWeight: 700, margin: '2rem 0', background: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
+                🏆 Game Over!
+              </h2>
+              {playersList.length > 0 && (
+                <div style={{ padding: '2rem', background: 'linear-gradient(135deg, #ffd70015 0%, #ffed4e15 100%)', borderRadius: '16px', textAlign: 'center', marginBottom: '2rem' }}>
+                  <p style={{ margin: '0 0 0.5rem', color: '#999', fontSize: '13px' }}>Champion</p>
+                  <p style={{ margin: '0', fontSize: '24px', fontWeight: 700, color: '#333' }}>🥇 {playersList[0].name}</p>
+                  <p style={{ margin: '0.5rem 0 0', fontSize: '18px', fontWeight: 600, color: '#ffd700' }}>{playersList[0].score} points</p>
+                </div>
+              )}
+              <button onClick={reset} className="primary-btn" style={{ width: '100%', fontSize: '16px', fontWeight: 600 }}>
+                Return Home
+              </button>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="card">
+            <h3 style={{ margin: '0 0 1.5rem', fontSize: '16px', fontWeight: 700, color: '#333', textTransform: 'uppercase' }}>
+              🏅 Leaderboard
+            </h3>
+            {playersList.length === 0 ? (
+              <p style={{ margin: '0', fontSize: '14px', color: '#999', textAlign: 'center', padding: '2rem 0' }}>Waiting...</p>
+            ) : (
+              playersList.map((p, i) => (
+                <div key={p.uid} className="leaderboard-item">
+                  <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                    <div className={`rank-badge ${i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : 'other'}`}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </div>
+                    <div>
+                      <p style={{ margin: '0', fontWeight: 600, fontSize: '14px', color: '#333' }}>{p.name}</p>
+                      {p.isCorrect && <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#4caf50' }}>✓</p>}
+                    </div>
+                  </div>
+                  <span style={{ fontWeight: 700, fontSize: '16px', color: '#333' }}>{p.score}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // JOIN GAME
+  if (screen === 'join') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div className="card" style={{ maxWidth: '450px', width: '100%' }}>
+          <h2 style={{ fontSize: '32px', fontWeight: 700, margin: '0 0 2rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
+            👥 Join Game
+          </h2>
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#333' }}>Room Code</label>
+            <input type="text" value={gameRoom} onChange={(e) => setGameRoom(e.target.value)} placeholder="game1" style={{ width: '100%' }} />
+          </div>
+
+          <div style={{ marginBottom: '2rem' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: '#333' }}>Your Name</label>
+            <input type="text" placeholder="Enter name" value={playerName} onChange={(e) => setPlayerName(e.target.value)} style={{ width: '100%' }} />
+          </div>
+          
+          <button onClick={() => {
+            if (!playerName) return;
+            const uid = 'p_' + Math.random().toString(36).substr(2, 9);
+            setPlayerId(uid);
+            setRole('player');
+            database.ref(`players/${gameRoom}/${uid}`).set({ uid, name: playerName, score: 0, lastAnswer: null, isCorrect: null });
+            setScreen('player');
+          }} disabled={!playerName} className="primary-btn" style={{ width: '100%', marginBottom: '12px', fontSize: '16px', fontWeight: 600, opacity: playerName ? 1 : 0.5 }}>
+            Join Game
+          </button>
+          
+          <button onClick={() => setScreen('home')} className="secondary-btn" style={{ width: '100%', fontSize: '16px', fontWeight: 600 }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // PLAYER GAME
+  if (screen === 'player' && role === 'player') {
+    const playersList = Object.values(players || {}).sort((a, b) => b.score - a.score);
+    const myScore = players[playerId]?.score || 0;
+    const myRank = playersList.findIndex(p => p.uid === playerId) + 1;
+
+    return (
+      <div style={{ minHeight: '100vh', padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 280px', gap: '2rem', alignItems: 'start' }}>
+        <div>
+          <div className="card" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '13px', color: '#999' }}>Your Score</p>
+                <p style={{ margin: '0', fontSize: '32px', fontWeight: 700, color: '#667eea' }}>
+                  {myScore}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '13px', color: '#999' }}>{playerName}</p>
+                <p style={{ margin: '0', fontSize: '24px', fontWeight: 700 }}>
+                  {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {gameState?.phase === 'question' && currentQ && (
+            <>
+              <div className="card" style={{ marginBottom: '2rem' }}>
+                <p style={{ margin: '0 0 0.5rem', fontSize: '13px', color: '#999' }}>Question {gameState.qIndex + 1}</p>
+                <h2 style={{ margin: '0', fontSize: '26px', fontWeight: 700, color: '#333' }}>{currentQ.question}</h2>
+              </div>
+              
+              <div style={{ textAlign: 'center', padding: '1.5rem', background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)', borderRadius: '16px', marginBottom: '2rem' }}>
+                <div style={{ fontSize: '56px', fontWeight: 700, color: gameState.timer <= 3 ? '#ff6b6b' : '#667eea', animation: gameState.timer <= 3 ? 'pulse 0.5s infinite' : 'pulse 1s infinite' }}>
+                  {gameState.timer}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                {shuffledOptions.map((option, idx) => (
+                  <button 
+                    key={idx}
+                    onClick={() => selectAnswer(option)}
+                    disabled={playerAnswered}
+                    className={`answer-btn ${playerAnswer === option ? 'selected' : ''}`}
+                    style={{ opacity: playerAnswered && playerAnswer !== option ? 0.4 : 1 }}>
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {gameState?.phase === 'reveal' && currentQ && (
+            <div className="card" style={{ background: players[playerId]?.isCorrect ? 'linear-gradient(135deg, #c8e6c915 0%, #4caf5015 100%)' : 'linear-gradient(135deg, #ffcdd215 0%, #d32f2f15 100%)', border: `3px solid ${players[playerId]?.isCorrect ? '#4caf50' : '#d32f2f'}` }}>
+              <div style={{ textAlign: 'center' }}>
+                <h3 style={{ margin: '0 0 1rem', fontSize: '32px', fontWeight: 700, color: players[playerId]?.isCorrect ? '#1b5e20' : '#b71c1c' }}>
+                  {players[playerId]?.isCorrect ? '✅ Correct!' : '❌ Incorrect'}
+                </h3>
+                <p style={{ margin: '0', fontSize: '16px', fontWeight: 600, color: '#333' }}>
+                  Answer: <span style={{ color: '#667eea' }}>{currentQ.answer}</span>
+                </p>
+                {players[playerId]?.isCorrect && (
+                  <p style={{ margin: '1rem 0 0', fontSize: '20px', fontWeight: 700, color: '#4caf50' }}>+100 points!</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {gameState?.phase === 'final' && (
+            <div className="card" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+              <h2 style={{ fontSize: '42px', fontWeight: 700, margin: '0 0 1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', color: 'transparent' }}>
+                Game Over! 🎉
+              </h2>
+              <p style={{ fontSize: '18px', fontWeight: 600, margin: '0 0 1.5rem', color: '#333' }}>Final Score</p>
+              <p style={{ fontSize: '48px', fontWeight: 700, margin: '0', color: '#667eea' }}>{myScore}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+          <h3 style={{ margin: '0 0 1.5rem', fontSize: '14px', fontWeight: 700, color: '#333', textTransform: 'uppercase' }}>
+            🏆 Rankings
+          </h3>
+          {playersList.map((p, i) => (
+            <div key={p.uid} className={`leaderboard-item ${i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}`} style={{ border: p.uid === playerId ? '2px solid #667eea' : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                <div className={`rank-badge ${i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : 'other'}`}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                </div>
+                <span style={{ fontWeight: 600, fontSize: '13px', color: '#333' }}>{p.name}</span>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: '14px', color: '#667eea' }}>{p.score}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+ReactDOM.render(<TriviaApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
